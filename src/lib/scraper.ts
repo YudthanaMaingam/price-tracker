@@ -18,13 +18,19 @@ export async function scrapeProductInfo(url: string): Promise<ScrapedProductInfo
         // 1. Browser Setup
         // --------------------------------------------------------------------
         if (process.env.NODE_ENV === 'production') {
-            // --- Config สำหรับ Vercel (Production) ---
-            // จำเป็นต้องใช้ puppeteer-core และ @sparticuz/chromium
+            // --- Config สำหรับ Vercel (โหลดจาก URL) ---
+
+            // บังคับให้โหลด Font ที่รองรับภาษาไทย (ถ้าจำเป็น)
+            await chromium.font('https://raw.githack.com/googlefonts/noto-emoji/main/fonts/NotoColorEmoji.ttf');
+
             browser = await puppeteerCore.launch({
-                args: [...chromium.args, "--hide-scrollbars", "--disable-web-security"],
+                args: chromium.args,
                 defaultViewport: { width: 1920, height: 1080 },
-                executablePath: await chromium.executablePath(),
-                headless: true, // หรือ chromium.headless ถ้าใช้เวอร์ชัน 123+
+                // ⚠️ ทีเด็ดอยู่ตรงนี้: สั่งให้โหลด Binary จาก Github Releases โดยตรง
+                executablePath: await chromium.executablePath(
+                    "https://github.com/Sparticuz/chromium/releases/download/v119.0.0/chromium-v119.0.0-pack.tar"
+                ),
+                headless: true,
             });
         } else {
             // --- Config สำหรับเครื่องเรา (Local) ---
