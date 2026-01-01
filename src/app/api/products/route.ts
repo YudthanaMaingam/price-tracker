@@ -4,6 +4,11 @@ import { createClient } from '@/lib/supabase/server'; // ใช้ Client ตั
 import { scrapeProductInfo } from '@/lib/scraper';
 import { ScrapedProductInfo } from '@/types';
 
+// ✅ เพิ่มบรรทัดนี้: ขยายเวลาให้ทำงานได้สูงสุด 60 วินาที (Maximum ของ Free Tier)
+export const maxDuration = 60; 
+// ✅ เพิ่มบรรทัดนี้: ป้องกันการ Cache หน้าเว็บเก่า
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   try {
     // 1. เช็ค User ก่อน (Security)

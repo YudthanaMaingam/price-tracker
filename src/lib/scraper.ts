@@ -49,6 +49,10 @@ export async function scrapeProductInfo(url: string): Promise<ScrapedProductInfo
     // รอโหลดหน้าเว็บ
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
+    // ✅ เพิ่มท่อนนี้: ปริ้นชื่อหน้าเว็บออกมาดูใน Logs
+    const pageTitle = await page.title();
+    console.log("📌 Loaded Page Title:", pageTitle);
+
     // --- Logic การดึงข้อมูล (เหมือนเดิม) ---
     const data = await page.evaluate(() => {
       const cleanPrice = (priceStr: string | null | undefined) => {
