@@ -1,0 +1,21 @@
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**", // อนุญาต https จากทุกโดเมน
+      },
+      {
+        protocol: "http",
+        hostname: "**", // อนุญาต http จากทุกโดเมน
+      },
+    ],
+  },
+  /* config options here */
+  reactCompiler: true,
+};
+
+export default nextConfig;
