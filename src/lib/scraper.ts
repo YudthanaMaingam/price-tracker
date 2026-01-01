@@ -21,10 +21,10 @@ export async function scrapeProductInfo(url: string): Promise<ScrapedProductInfo
             // --- Config สำหรับ Vercel (Production) ---
             // จำเป็นต้องใช้ puppeteer-core และ @sparticuz/chromium
             browser = await puppeteerCore.launch({
-                args: chromium.args,
-                defaultViewport: { width: 1920, height: 1080 }, // กำหนดค่าเอง
+                args: [...chromium.args, "--hide-scrollbars", "--disable-web-security"],
+                defaultViewport: { width: 1920, height: 1080 },
                 executablePath: await chromium.executablePath(),
-                headless: true, // ใช้ true แทน "new"
+                headless: true, // หรือ chromium.headless ถ้าใช้เวอร์ชัน 123+
             });
         } else {
             // --- Config สำหรับเครื่องเรา (Local) ---
