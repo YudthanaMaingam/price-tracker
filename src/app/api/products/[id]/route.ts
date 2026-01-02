@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { scrapeProductInfo } from '@/lib/scraper';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 // 1. DELETE: ลบสินค้า
 export async function DELETE(
     request: Request,
@@ -52,7 +54,7 @@ export async function PATCH(
         // 2. ดึงข้อมูลสินค้า (RLS จะช่วยกรองว่าต้องเป็นของ user คนนี้เท่านั้น)
         const { data: product, error: fetchError } = await supabase
             .from('products')
-            .select('url, lowest_price, highest_price')
+            .select('url, lowest_price, highest_price, current_price')
             .eq('id', id)
             .single();
 
@@ -78,6 +80,8 @@ export async function PATCH(
                 current_price: newPrice,
                 lowest_price: newLowest,
                 highest_price: newHighest,
+                image_url: scrapedData.imageUrl,
+                name: scrapedData.name,
                 updated_at: new Date().toISOString(),
             })
             .eq('id', id);

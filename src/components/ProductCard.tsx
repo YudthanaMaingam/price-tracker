@@ -5,11 +5,9 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
-import { Product } from '@/types';
-import { PriceChart } from './PriceChart'; // อย่าลืม Import กราฟที่เราสร้าง
+import { PriceChart } from './PriceChart';
 
 // --- Helper Functions ---
-
 const formatCurrency = (amount: number | undefined | null) => {
   if (amount === undefined || amount === null) return 'N/A';
   return new Intl.NumberFormat('th-TH', {
@@ -23,12 +21,8 @@ const formatCurrency = (amount: number | undefined | null) => {
 const formatDate = (dateString: string | undefined | null) => {
   if (!dateString) return '-';
   const date = new Date(dateString);
-  // เช็คว่า Date ใช้ได้จริงไหม ถ้าไม่ได้ให้คืนค่าขีด
   if (isNaN(date.getTime())) return '-';
-  
-  // ถ้าเป็นวันที่ปัจจุบัน ให้แสดงแค่เวลา, ถ้าเก่ากว่านั้นแสดงวันที่
   const isToday = new Date().toDateString() === date.toDateString();
-  
   return date.toLocaleDateString('th-TH', {
     day: isToday ? undefined : 'numeric', 
     month: isToday ? undefined : 'short', 
@@ -37,44 +31,46 @@ const formatDate = (dateString: string | undefined | null) => {
   });
 };
 
-// --- Component ---
-
 interface ProductCardProps {
-  product: Product;
+  product: any; // รับข้อมูลแบบ snake_case จาก DB
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const queryClient = useQueryClient();
   const [isHovered, setIsHovered] = useState(false);
 
-  // คำนวณส่วนต่างราคา
-  const isPriceDropped = product.originalPrice && product.currentPrice < product.originalPrice;
-  const priceDropAmount = (product.originalPrice || 0) - product.currentPrice;
+  // ✅ 1. Map ตัวแปรให้ใช้ง่าย (ดึงจาก snake_case)
+  const currentPrice = product.current_price;
+  const originalPrice = product.original_price; // หรือ product.highest_price เป็น fallback
+  const highestPrice = product.highest_price;
+  const lowestPrice = product.lowest_price;
+  const imageUrl = product.image_url;
+  const updatedAt = product.updated_at;
 
-  // 1. Mutation: ลบสินค้า
+  // คำนวณส่วนต่างราคา
+  const isPriceDropped = originalPrice && currentPrice < originalPrice;
+  const priceDropAmount = (originalPrice || 0) - currentPrice;
+
+  // Mutation: ลบสินค้า
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete');
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
     onError: () => alert('Failed to delete product.')
   });
 
-  // 2. Mutation: เช็คราคา (Refresh)
+  // Mutation: เช็คราคา (Refresh)
   const refreshMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/products/${id}`, { method: 'PATCH' });
       if (!res.ok) throw new Error('Failed to update price');
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      // บังคับ Refetch History ของกราฟด้วย
       queryClient.invalidateQueries({ queryKey: ['price-history', product.id] });
-      // alert(`Updated! Price: ${formatCurrency(data.newPrice)}`); // ปิด alert ก็ได้ถ้ารำคาญ
     },
     onError: () => alert('Failed to update price.')
   });
@@ -92,7 +88,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       onMouseLeave={() => setIsHovered(false)}
     >
       
-      {/* ปุ่ม Delete (มุมขวาบน Absolute) */}
+      {/* ปุ่ม Delete (มุมขวาบน) */}
       <button 
         onClick={handleDelete}
         disabled={deleteMutation.isPending}
@@ -107,15 +103,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       </button>
 
       {/* --- ส่วนซ้าย: ข้อมูลสินค้า --- */}
-      {/* min-w-0 สำคัญมาก! ช่วยให้ text-truncate ทำงานใน Flexbox ได้ */}
       <div className="p-4 flex-1 flex flex-col justify-between gap-3 border-b sm:border-b-0 sm:border-r border-gray-700 min-w-0">
         
         <div className="flex gap-4 min-w-0">
             {/* รูปภาพ */}
             <div className="relative w-24 h-24 sm:w-24 sm:h-24 flex-shrink-0 bg-gray-900 rounded-lg overflow-hidden border border-gray-700/50 self-start">
-              {product.imageUrl ? (
+              {imageUrl ? (
                 <Image
-                  src={product.imageUrl}
+                  src={imageUrl}
                   alt={product.name}
                   fill
                   sizes="(max-width: 768px) 100vw, 20vw"
@@ -126,7 +121,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               )}
             </div>
 
-            {/* ชื่อและราคาหลัก */}
+            {/* ชื่อและราคา */}
             <div className="flex-1 min-w-0 flex flex-col justify-start">
                 <h3 className="text-sm sm:text-base font-semibold text-gray-100 line-clamp-2 leading-snug mb-2 hover:text-blue-400 transition-colors">
                     <Link href={product.url} target="_blank">{product.name}</Link>
@@ -134,41 +129,38 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                    <span className={`text-xl sm:text-2xl font-bold ${isPriceDropped ? 'text-green-400' : 'text-blue-400'}`}>
-                    {formatCurrency(product.currentPrice)}
+                    {formatCurrency(currentPrice)}
                   </span>
                   {isPriceDropped && (
                     <span className="text-[10px] text-green-300 bg-green-900/40 px-1.5 py-0.5 rounded border border-green-700/50">
-                       ↓ {formatCurrency(priceDropAmount)}
+                        ↓ {formatCurrency(priceDropAmount)}
                     </span>
                   )}
                 </div>
                  <p className="text-[10px] text-gray-500">
-                    Updated: {formatDate(product.updatedAt)}
+                   Updated: {formatDate(updatedAt)}
                  </p>
             </div>
         </div>
 
-        {/* สถิติราคา (Horizontal Compact - ไม่ซ้อนกัน) */}
+        {/* สถิติราคา */}
         <div className="mt-auto flex items-center justify-between gap-1 bg-gray-900/40 py-2 px-2 rounded-lg border border-gray-700/50">
-          {/* High */}
           <div className="flex flex-col items-center flex-1 min-w-0">
             <span className="text-[9px] uppercase tracking-wider text-gray-500 mb-0.5">High</span>
             <span className="font-medium text-[11px] sm:text-xs text-red-300 truncate w-full text-center">
-              {formatCurrency(product.highestPrice)}
+              {formatCurrency(highestPrice)}
             </span>
           </div>
-          {/* Low */}
           <div className="flex flex-col items-center flex-1 min-w-0 bg-gray-800/50 rounded py-0.5">
             <span className="text-[9px] uppercase tracking-wider text-gray-500 mb-0.5">Low</span>
             <span className="font-medium text-[11px] sm:text-xs text-green-300 truncate w-full text-center">
-              {formatCurrency(product.lowestPrice)}
+              {formatCurrency(lowestPrice)}
             </span>
           </div>
-          {/* Start */}
           <div className="flex flex-col items-center flex-1 min-w-0">
             <span className="text-[9px] uppercase tracking-wider text-gray-500 mb-0.5">Start</span>
             <span className="font-medium text-[11px] sm:text-xs text-gray-300 truncate w-full text-center">
-              {formatCurrency(product.originalPrice)}
+              {formatCurrency(originalPrice)}
             </span>
           </div>
         </div>
@@ -176,14 +168,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       </div>
 
       {/* --- ส่วนขวา: กราฟ & Actions --- */}
-      {/* sm:w-[13rem] -> Fix ความกว้างในจอใหญ่ */}
-      {/* flex-shrink-0 -> ห้ามโดนบีบจนปุ่มเบี้ยว */}
       <div className="p-4 bg-gray-900/20 flex flex-col justify-between gap-3 sm:w-[13rem] flex-shrink-0 border-t sm:border-t-0 border-gray-700">
         
         {/* Graph Area */}
         <div className="h-20 w-full bg-gray-800/50 rounded-md border border-gray-700/50 relative overflow-hidden group-hover:border-gray-600 transition-colors">
             <div className="absolute inset-0 pt-2 pr-2 pb-0 pl-0">
-                {/* Component กราฟ */}
                 <PriceChart productId={product.id} />
             </div>
             <span className="absolute top-1 left-2 text-[9px] text-gray-500 font-mono z-10 pointer-events-none opacity-70">
@@ -191,7 +180,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </span>
         </div>
         
-        {/* Buttons Action */}
+        {/* ✅ 2. ปุ่ม Action พร้อม Icon และ UI เดิม */}
         <div className="flex flex-col gap-2">
            {/* ปุ่ม Refresh */}
            <button
@@ -200,7 +189,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                     refreshMutation.mutate(product.id);
                 }}
                 disabled={refreshMutation.isPending}
-                // whitespace-nowrap ป้องกันข้อความตกบรรทัด
                 className={`cursor-pointer w-full py-1.5 px-3 rounded-md text-xs font-medium border flex items-center justify-center gap-2 transition-all whitespace-nowrap
                     ${refreshMutation.isPending 
                         ? 'bg-gray-800 text-gray-400 border-gray-700 cursor-wait' 
@@ -210,11 +198,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             >
                 {refreshMutation.isPending ? (
                     <>
+                        {/* Loading Spinner SVG */}
                         <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                         <span>Updating...</span>
                     </>
                 ) : (
                     <>
+                        {/* Refresh Icon SVG */}
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
                         <span>Check Price</span>
                     </>
@@ -229,6 +219,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               className="w-full py-1.5 px-3 rounded-md text-xs font-medium bg-blue-600/10 text-blue-400 border border-blue-900/50 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2 whitespace-nowrap"
             >
               <span>Visit Store</span>
+              {/* External Link Icon SVG */}
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
            </Link>
         </div>
