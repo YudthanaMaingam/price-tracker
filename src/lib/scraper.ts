@@ -57,7 +57,14 @@ async function scrapeWithZenRows(url: string): Promise<ScrapedProductInfo | null
         'js_render': 'true',
         'antibot': 'true',
         'premium_proxy': 'true',
-        'wait_for': '.pdp-mod-product-badge-title, .qaNIZv, ._44qnta', // รอให้ Element ชื่อสินค้าโผล่มา
+        'custom_headers': 'true',
+        'wait_for': 'body', // รอให้ Element ชื่อสินค้าโผล่มา
+      },
+      // 📝 3. ยัด Headers หลอกว่าเป็นคนไทยใช้ Chrome
+      headers: {
+        'Referer': 'https://google.com/',
+        'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
       timeout: 60000,
     });
