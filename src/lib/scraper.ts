@@ -58,7 +58,8 @@ async function scrapeWithZenRows(url: string): Promise<ScrapedProductInfo | null
         'antibot': 'true',
         'premium_proxy': 'true',
         'wait_for': '.pdp-mod-product-badge-title, .qaNIZv, ._44qnta', // รอให้ Element ชื่อสินค้าโผล่มา
-      }
+      },
+      timeout: 60000,
     });
 
     const $ = cheerio.load(html);
