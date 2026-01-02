@@ -1,7 +1,7 @@
 // src/components/ProductCard.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
@@ -38,25 +38,66 @@ interface ProductCardProps {
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const queryClient = useQueryClient();
   const [isHovered, setIsHovered] = useState(false);
+  
+  // State สำหรับการแก้ไข Target Price
+  const [isEditingTarget, setIsEditingTarget] = useState(false);
+  const [tempTargetPrice, setTempTargetPrice] = useState(product.target_price || '');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // 1. ดึงตัวแปรมาใช้
+  // ดึงตัวแปรมาใช้
   const currentPrice = product.current_price;
   const originalPrice = product.original_price;
   const highestPrice = product.highest_price;
   const lowestPrice = product.lowest_price;
-  const targetPrice = product.target_price; // ✅ ดึง Target Price มา
+  const targetPrice = product.target_price;
   const imageUrl = product.image_url;
   const updatedAt = product.updated_at;
 
-  // 2. Logic เช็คว่า "ถึงเป้าหมายหรือยัง?" (Good Deal)
-  // ต้องมี targetPrice และ ราคาปัจจุบันต้องน้อยกว่าหรือเท่ากับเป้า
   const isTargetMet = targetPrice && currentPrice <= targetPrice;
-
-  // คำนวณส่วนต่างราคาลดลงจากเดิม
   const isPriceDropped = originalPrice && currentPrice < originalPrice;
   const priceDropAmount = (originalPrice || 0) - currentPrice;
 
-  // --- Mutations (เหมือนเดิม) ---
+  // Auto focus เมื่อกดแก้ไข
+  useEffect(() => {
+    if (isEditingTarget && inputRef.current) {
+        inputRef.current.focus();
+    }
+  }, [isEditingTarget]);
+
+  // --- Mutations ---
+
+  // 1. Update Target Price Mutation
+  const updateTargetMutation = useMutation({
+    mutationFn: async (newTarget: number | null) => {
+        const res = await fetch(`/api/products/${product.id}`, { 
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetPrice: newTarget }) // ส่งไปแค่ targetPrice
+        });
+        if (!res.ok) throw new Error('Failed to update target price');
+        return res.json();
+    },
+    onSuccess: () => {
+        setIsEditingTarget(false);
+        queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: () => alert('Failed to update target price')
+  });
+
+  const handleSaveTarget = () => {
+      const val = tempTargetPrice === '' ? null : Number(tempTargetPrice);
+      updateTargetMutation.mutate(val);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') handleSaveTarget();
+      if (e.key === 'Escape') {
+          setIsEditingTarget(false);
+          setTempTargetPrice(targetPrice || '');
+      }
+  };
+
+  // 2. Delete Mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
@@ -66,9 +107,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     onError: () => alert('Failed to delete product.')
   });
 
+  // 3. Refresh Mutation
   const refreshMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/products/${id}`, { method: 'PATCH' });
+      const res = await fetch(`/api/products/${id}`, { method: 'PATCH' }); // ไม่ส่ง body = scrape
       if (!res.ok) throw new Error('Failed to update price');
       return res.json();
     },
@@ -87,7 +129,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     <div 
       className={`relative rounded-xl shadow-lg overflow-hidden transition-all duration-300 border flex flex-col sm:flex-row h-full group
         ${isTargetMet 
-            ? 'bg-gray-800 border-green-500/50 shadow-green-500/10' // ✨ ถ้าถึงเป้า ขอบเขียวเรืองแสง
+            ? 'bg-gray-800 border-green-500/50 shadow-green-500/10' 
             : 'bg-gray-800 border-gray-700 hover:shadow-2xl'
         }
       `}
@@ -124,19 +166,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                     <Link href={product.url} target="_blank">{product.name}</Link>
                 </h3>
                 
-                {/* 🎯 ส่วนแสดงราคา + ป้าย Target Reached */}
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                    <span className={`text-xl sm:text-2xl font-bold ${isTargetMet ? 'text-green-400' : isPriceDropped ? 'text-green-300' : 'text-blue-400'}`}>
                     {formatCurrency(currentPrice)}
                   </span>
 
-                  {/* ถ้าถึงเป้าหมาย: โชว์ป้ายเขียวเข้ม */}
                   {isTargetMet ? (
                      <span className="flex items-center gap-1 text-[10px] font-bold text-green-100 bg-green-600 px-2 py-0.5 rounded shadow-lg shadow-green-500/20 animate-pulse">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
                           <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
                         </svg>
-                        TARGET HIT!
+                        HIT!
                      </span>
                   ) : isPriceDropped && (
                     <span className="text-[10px] text-green-300 bg-green-900/40 px-1.5 py-0.5 rounded border border-green-700/50">
@@ -151,15 +191,47 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </div>
         </div>
 
-        {/* สถิติราคา (เพิ่มช่อง Target) */}
+        {/* สถิติราคา */}
         <div className="mt-auto grid grid-cols-4 gap-1 bg-gray-900/40 py-2 px-2 rounded-lg border border-gray-700/50">
           
-          {/* 🎯 Target (โชว์ถ้ามีการตั้งไว้) */}
-          <div className="flex flex-col items-center min-w-0 border-r border-gray-700/50">
-            <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-gray-500 mb-0.5">Target</span>
-            <span className={`font-medium text-[10px] sm:text-xs truncate w-full text-center ${targetPrice ? 'text-yellow-400' : 'text-gray-600'}`}>
-              {formatCurrency(targetPrice)}
-            </span>
+          {/* 🎯 Target (Editable) */}
+          <div className="flex flex-col items-center min-w-0 border-r border-gray-700/50 relative group/target">
+            <div className="flex items-center gap-1">
+                <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-gray-500 mb-0.5">Target</span>
+                {/* ปุ่ม Edit เล็กๆ จะโชว์เมื่อเอาเมาส์ชี้ช่อง Target */}
+                {!isEditingTarget && (
+                    <button 
+                        onClick={() => setIsEditingTarget(true)}
+                        className="opacity-50 hover:opacity-100 text-gray-400 hover:text-white transition-opacity"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                            <path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" />
+                            <path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0010 3H4.75A2.75 2.75 0 002 5.75v9.5A2.75 2.75 0 004.75 18h9.5A2.75 2.75 0 0017 15.25V10a.75.75 0 00-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5z" />
+                        </svg>
+                    </button>
+                )}
+            </div>
+            
+            {isEditingTarget ? (
+                <div className="flex items-center justify-center w-full px-1">
+                    <input 
+                        ref={inputRef}
+                        type="number"
+                        className="w-full text-[10px] sm:text-xs text-center bg-gray-800 text-white border border-blue-500 rounded px-0 py-0.5 focus:outline-none"
+                        value={tempTargetPrice}
+                        onChange={(e) => setTempTargetPrice(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        onBlur={handleSaveTarget} // คลิกว่างเพื่อ Save
+                    />
+                </div>
+            ) : (
+                <span 
+                    onClick={() => setIsEditingTarget(true)}
+                    className={`font-medium text-[10px] sm:text-xs truncate w-full text-center cursor-pointer hover:underline decoration-dotted ${targetPrice ? 'text-yellow-400' : 'text-gray-600'}`}
+                >
+                    {formatCurrency(targetPrice)}
+                </span>
+            )}
           </div>
 
           <div className="flex flex-col items-center min-w-0 border-r border-gray-700/50">
@@ -187,7 +259,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
       </div>
 
-      {/* --- ส่วนขวา: กราฟ & Actions --- */}
+      {/* --- ส่วนขวา: กราฟ & Actions (เหมือนเดิม) --- */}
       <div className="p-4 bg-gray-900/20 flex flex-col justify-between gap-3 sm:w-[13rem] flex-shrink-0 border-t sm:border-t-0 border-gray-700">
         <div className="h-20 w-full bg-gray-800/50 rounded-md border border-gray-700/50 relative overflow-hidden group-hover:border-gray-600 transition-colors">
             <div className="absolute inset-0 pt-2 pr-2 pb-0 pl-0"><PriceChart productId={product.id} /></div>

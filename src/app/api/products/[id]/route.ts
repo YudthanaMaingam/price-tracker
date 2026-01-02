@@ -12,7 +12,7 @@ export async function DELETE(
 ) {
     try {
         const supabase = await createClient();
-        
+
         // 1. เช็ค User
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
@@ -42,7 +42,7 @@ export async function PATCH(
 ) {
     try {
         const supabase = await createClient();
-        
+
         // 1. เช็ค User
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
@@ -51,7 +51,36 @@ export async function PATCH(
 
         const { id } = await params;
 
-        // 2. ดึงข้อมูลสินค้า (RLS จะช่วยกรองว่าต้องเป็นของ user คนนี้เท่านั้น)
+        // 🔍 อ่าน Body เพื่อดูว่า User ต้องการทำอะไร
+        let body = {};
+        try {
+            body = await request.json();
+        } catch (e) {
+            // ถ้าไม่มี body แปลว่าเป็นการกดปุ่ม Refresh (Scrape) แบบเดิม
+        }
+
+        const { targetPrice } = body as { targetPrice?: number | null };
+
+        // =========================================================
+        // 🅰️ กรณีที่ 1: มีการส่ง targetPrice มา -> ให้อัปเดตแค่เป้าหมาย
+        // =========================================================
+        if (targetPrice !== undefined) {
+            const { error } = await supabase
+                .from('products')
+                .update({
+                    target_price: targetPrice,
+                    updated_at: new Date().toISOString() // อัปเดตเวลาด้วยเพื่อให้รู้ว่ามีการแก้ไข
+                })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            return NextResponse.json({ message: 'Target price updated', targetPrice });
+        }
+
+        // =========================================================
+        // 🅱️ กรณีที่ 2: ไม่ได้ส่ง targetPrice -> ทำการ Scrape ราคาใหม่ (Logic เดิม)
+        // =========================================================
         const { data: product, error: fetchError } = await supabase
             .from('products')
             .select('url, lowest_price, highest_price, current_price')
@@ -69,9 +98,12 @@ export async function PATCH(
             return NextResponse.json({ error: 'Failed to scrape latest price' }, { status: 500 });
         }
 
+        
         const newPrice = scrapedData.price;
         const newLowest = Math.min(newPrice, product.lowest_price);
         const newHighest = Math.max(newPrice, product.highest_price);
+        const currentLowest = product.lowest_price ?? newPrice; 
+        const currentHighest = product.highest_price ?? newPrice;
 
         // 4. อัปเดต DB
         const { error: updateError } = await supabase
